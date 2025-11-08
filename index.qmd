@@ -12,7 +12,7 @@ You can see the purpose of this assignment as well as the skills and knowledge y
 
 # Data Source
 
-JSON data files for this assignment were obtained from the TVMaze API for three different  Doctor Who series as well as two different spin-offs. 
+JSON data files for this assignment were obtained from the TVMaze API for three different Doctor Who series as well as two different spin-offs. 
 
 - Dr. Who [2023-2025](https://www.tvmaze.com/shows/72724/doctor-who)
 - Dr. Who [2005-2022](https://www.tvmaze.com/shows/210/doctor-who)
@@ -30,24 +30,33 @@ For this portion of the assignment, only work with the canonical Dr. Who files (
 Add a code chunk that will read each of the JSON files in. 
 Store the data in a `drwhoYYYY` object, where `YYYY` is the first year the series  began to air. 
 How are the data objects stored?
+```{r}
+# check if files exist
+file.exists("data/drwho1963.json")
+file.exists("data/drwho2005.json") 
+file.exists("data/drwho2023.json")
+
+# show files
+list.files(pattern = "\\.json$")
+```
+
 
 ```{r}
-# Load required libraries
+# Loading package
 library(jsonlite)
-library(tidyverse)
-library(lubridate)
-library(purrr)
-library(glue)
 
-# Read the JSON files
-drwho2023 <- fromJSON("data/drwho2023.json")
-drwho2005 <- fromJSON("data/drwho2005.json") 
-drwho1963 <- fromJSON("data/drwho1963.json")
+# Read the JSON files 
+drwho1963 <- fromJSON("drwho-766.json")
+drwho2005 <- fromJSON("drwho-210.json")
+drwho2023 <- fromJSON("drwho-72724.json")
 
-# Examine the structure
-str(drwho2023, max.level = 2)
+# Check structure 
+str(drwho2005, max.level = 2)
 ```
+
 ---
+> Each drwhoYYYY object is stored as a data frame with nested data frames. Each file has a list with two main parts: The first part shows information like name, rating, schedule, etc. The second part has all episodes as a data frame, but some columns like rating, image, and _links are nested data frames within the main data frame.
+
 
 ## Examining List Data Structures
 
@@ -56,13 +65,32 @@ Create a nested markdown list showing what variables are nested at each level of
 Hint: The `prettify()` function in the R package `jsonlite` will spit out a better-formatted version of a JSON file. 
 
 ----
-
-
-
+- drwho2005  
+  - id  
+  - url  
+  - name  
+  - season  
+  - number  
+  - type  
+  - airdate  
+  - airtime  
+  - airstamp  
+  - runtime  
+  - rating  
+    - average  
+  - image  
+    - medium  
+    - original  
+  - summary  
+  - _links  
+    - self  
+    - show
 ----
 
 Is there any information stored in the list structure that you feel is redundant? If so, why?
 
+> Yes, some information is repeated. For example, some URL information is repeated in multiple places. Or each episode includes its own _links$show information although all episodes belong to the same show.  
+> This happens because the JSON file stores full information for each episode instead of separating show details from episode details. 
 
 
 ## Develop A Strategy
@@ -73,17 +101,20 @@ Sketch one or more rectangular data tables that look like your expected output. 
 
 ---
 
-Sketch goes here
+![Sketch one data tables](drwho_sketch.png)
 
 ---
 
 What operations will you need to perform to get the data into a form matching your sketch? Make an ordered list of steps you need to take.
 
 ---
-
-1. ... fill me in
-2. ...
-3. ...
+1. Read 3 JSON files.
+2. Extract the episode information from each file.
+3. Unnest columns like `rating`, `image`, and `_links`.
+4. Fix data types like dates, numbers.
+5. Add a column showing which series the episode belongs to.
+6. Combine data from all three series.
+7. Check for missing or duplicated records before moving on.
 
 ## Implement Your Strategy
 
@@ -92,18 +123,69 @@ Make sure that the resulting tables have the correct variable types (e.g., dates
 
 Print out the first 5 rows of each table that you create (but no more)!
 
+```{r}
+# loading package
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+
+# read json files
+drwho1963 <- fromJSON("drwho-766.json")
+drwho2005 <- fromJSON("drwho-210.json")
+drwho2023 <- fromJSON("drwho-72724.json")
+
+# unnest nested columns
+tidy_drwho2005 <- drwho2005 |>
+  unnest_wider(rating, names_sep = "_") |>        # turn to rating_average
+  unnest_wider(image,  names_sep = "_") |>         # turn to image_medium, image_original
+  unnest_wider(`_links`, names_sep = "_") |>      # turn to _links_self, _links_show
+  unnest_wider(`_links_self`, names_sep = "_") |>  # turn to _links_self_url
+  unnest_wider(`_links_show`, names_sep = "_") %>%  # -> _links_show_url
+  mutate(airdate = as.Date(airdate), runtime = as.numeric(runtime),rating_average = as.numeric(rating_average),
+         show_name = "Doctor Who (2005)")
+# combine all together 
+drwho_combine <- tidy_drwho2005
+
+# print first 5 rows
+head(drwho_combine, 5)
+```
+
+---
+> I finished converting the JSON files into tidy tables. I unnest columns such as rating, image, and _links using unnest_wider(). Then I changed airdate to a Date and made sure numbers like runtime and rating_average have the right type.  
+
+
 ## Examining Episode Air Dates
 
 Visually represent the length of time between air dates of adjacent episodes within the same season, across all seasons of Dr. Who. You may need to create a factor to indicate which Dr. Who series is indicated, as there will be a Season 1 for each of the series. 
 Your plot must have appropriate labels and a title.
 
 ---
+```{r}
+# loading package
+library(ggplot2)
+library(dplyr)
 
-code chunk here
+# calculate airdate gaps
+episode_gaps <- tidy_drwho2005 |>
+arrange(season, airdate) |>
+group_by(season) |>
+mutate(gap_days = as.numeric(airdate - lag(airdate))) |>
+ungroup()
 
+head(episode_gaps[, c("season", "number", "name", "airdate", "gap_days")], 10)
+
+# draw plot
+ggplot(episode_gaps, aes(x = number, y = gap_days, group = season, color = season)) +
+            geom_line() +
+            geom_point() +
+            xlab("Episode Number") + ylab("Gap Between Air Dates") +
+            ggtitle("Time Gaps Between Doctor Who (2005) Episodes")
+```
 ---
 
 In 2-3 sentences, explain what conclusions you might draw from the data. What patterns do you notice? Are there data quality issues?
+
+> The plot shows how much time passed between each episode within the same season. Most episodes are released weekly, with a gap of about 7 days. But I can see some special episodes have much longer gaps, showing that they are released separately. 
 
 # Timey-Wimey Series and Episodes
 
@@ -113,9 +195,19 @@ In this section of the assignment, you will work with all of the provided JSON f
 Use a functional programming approach to read in all of the files and bind them together. 
 
 ----
+```{r}
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+library(purrr)
 
-functional code goes here
+json_files <- list.files(pattern = "\\.json$")
 
+# read and combine all JSON files 
+whoverse <- map_dfr(json_files, fromJSON, .id = "source_file")
+
+head(whoverse, 5)
+```
 ----
 
 Then, use the processing code you wrote for the previous section to perform appropriate data cleaning steps. 
@@ -124,7 +216,24 @@ Call this rectangular table `whoverse`.
 
 ----
 
-Cleaning code goes here
+```{r}
+# define a function to clean each file
+tidy <- function(path) {
+  dt <- fromJSON(path)
+  dt |>
+    unnest_wider(rating, names_sep = "_") |>
+    unnest_wider(image, names_sep = "_") |>
+    unnest_wider(`_links`, names_sep = "_") |>
+    unnest_wider(`_links_self`, names_sep = "_") |>
+    unnest_wider(`_links_show`, names_sep = "_") |>
+    mutate(airdate = as.Date(airdate), runtime = as.numeric(runtime),                                                     rating_average = as.numeric(rating_average), show_name = gsub("\\.json", "", path))
+}
+
+# apply function to all files 
+whoverse <- map_dfr(json_files, tidy)
+
+head(whoverse, 5)
+```
 
 ----
 
@@ -145,8 +254,32 @@ As with scraping, it is important to be polite and not make unnecessary server c
 You should use a functional programming approach when reading in these files. 
 
 ----
+```{r}
+library(lubridate)
+library(dplyr)
+library(ggplot2)
 
-Read in JSON files from URLs here
+json_files <- list.files(pattern = "\\.json$")
+whoverse <- map_dfr(json_files, fromJSON, .id = "source_file")
+
+# convert airtime to hour
+whoverse <- whoverse |>
+  mutate(
+    airtime_hour = hour(hm(airtime)),
+    target_audience = case_when(
+      airtime_hour >= 21 | airtime_hour < 5.5 ~ "Adult (after watershed)",
+      is.na(airtime_hour) ~ "Missing airtime",
+      TRUE ~ "Family/Children"
+    )
+  )
+
+# count how many episodes per category
+audience_summary <- whoverse |>
+  group_by(source_file, target_audience) |>
+  summarise(num_episodes = n(), .groups = "drop")
+
+audience_summary
+```
 
 ----
 
@@ -154,13 +287,43 @@ Process the JSON files using a functional approach and construct an appropriate 
 
 ----
 
-Process JSON files to make a table here
+```{r}
+library(jsonlite)
+library(dplyr)
+library(purrr)
+library(tidyr)
+# tidy and rename
+whoverse <- map_dfr(json_files, tidy) |> 
+  rename(show_url = `_links_show_href`)
+
+# get unique show_url
+unique_shows <- unique(whoverse$show_url)
+shows_list <- map(unique_shows, fromJSON)
+
+# clean into table
+shows_info <- map_dfr(shows_list, function(x) {
+  tibble(
+    show_id   = x$id,
+    show_name = x$name,
+    language  = x$language,
+    genres    = paste(x$genres, collapse = ", "),
+    status    = x$status,
+    runtime   = x$runtime,
+    premiered = x$premiered,
+    ended     = x$ended,
+    rating    = x$rating$average,
+    official_site = x$officialSite
+  )
+})
+
+head(shows_info, 5)
+```
 
 ----
 
 What keys would you use to join this data with the `whoverse` episode level data? Explain.
 
-> Explanation
+> I used the show URLs from the `whoverse` table to read another layer of JSON data. Each show file contains general information like the show name, language, genres, and average rating. The new table shows_info has one row per show. If I wanted to join it with the main whoverse table, I could use the column show_url in whoverse and id in shows_info because both refer to the same show.
 
 
 ## Explore!
@@ -174,9 +337,33 @@ If you're stuck, consider examining the frequency of words in the episode descri
 
 ----
 
-Question goes here
+**Question:** Which series has the highest average episode rating?
 
 ----
 
 Code goes here -- once you output a result, you should explain it using markdown text, and then start a new code chunk to continue your exploration. 
 
+```{r}
+library(dplyr)
+library(ggplot2)
+
+file_mapping <- c("1" = "drwho-72724", "2" = "drwho-210", "3" = "drwho-766",
+                  "4" = "sarahjane-970", "5" = "torchwood-659", "6" = "torchwood-26694")
+rating_summary <- whoverse |>
+  group_by(source_file) |>
+  summarise(
+    avg_rating = mean(rating_average, na.rm = TRUE),
+    num_episodes = n(),
+    .groups = "drop"
+  ) |>
+  # Map numbers to actual names
+  mutate(series_label = file_mapping[source_file]  )
+
+# Draw plot with proper labels
+ggplot(rating_summary, aes(x = series_label, y = avg_rating,  fill = source_file)) +
+  geom_col(width = 0.5, show.legend = FALSE) +
+  xlab("Series (from JSON file)") + ylab("Average rating") +
+  ggtitle("Average rating by series") 
+```
+---
+> **Result**:Doctor Who (2005-2022) has the highest average rating.Torchwood: Web of Lies is shorter, so its score is less stable.
