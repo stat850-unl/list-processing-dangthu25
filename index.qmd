@@ -1,6 +1,6 @@
 ---
 title: "Lab: List Processing"
-author: "Your Name Here"
+author: "Thu Dang"
 format: html
 number-sections: true
 number-depth: 2
@@ -31,6 +31,22 @@ Add a code chunk that will read each of the JSON files in.
 Store the data in a `drwhoYYYY` object, where `YYYY` is the first year the series  began to air. 
 How are the data objects stored?
 
+```{r}
+# Load required libraries
+library(jsonlite)
+library(tidyverse)
+library(lubridate)
+library(purrr)
+library(glue)
+
+# Read the JSON files
+drwho2023 <- fromJSON("data/drwho2023.json")
+drwho2005 <- fromJSON("data/drwho2005.json") 
+drwho1963 <- fromJSON("data/drwho1963.json")
+
+# Examine the structure
+str(drwho2023, max.level = 2)
+```
 ---
 
 ## Examining List Data Structures
@@ -41,7 +57,7 @@ Hint: The `prettify()` function in the R package `jsonlite` will spit out a bett
 
 ----
 
-List here
+
 
 ----
 
