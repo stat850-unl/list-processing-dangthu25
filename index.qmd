@@ -6,8 +6,9 @@ number-sections: true
 number-depth: 2
 ---
 
-::: callout
-You can see the purpose of this assignment as well as the skills and knowledge you should be using and acquiring, in the [Transparency in Learning and Teaching (TILT)](tilt.qmd) document in this repository. The TILT document also contains a checklist for self-reflection that will provide some guidance on how the assignment will be graded. 
+::: {.callout-note}
+You can see the purpose of this assignment as well as the skills and knowledge you should be using and acquiring, in the [Transparency in Learning and Teaching (TILT)](tilt.qmd) document in this repository.  
+The TILT document also contains a checklist for self-reflection that will provide some guidance on how the assignment will be graded.
 :::
 
 # Data Source
@@ -32,11 +33,6 @@ Store the data in a `drwhoYYYY` object, where `YYYY` is the first year the serie
 How are the data objects stored?
 
 ```{r}
-# check if files exist
-file.exists("data/drwho1963.json")
-file.exists("data/drwho2005.json") 
-file.exists("data/drwho2023.json")
-
 # show files
 list.files(pattern = "\\.json$")
 ```
@@ -65,7 +61,7 @@ Create a nested markdown list showing what variables are nested at each level of
 
 Hint: The `prettify()` function in the R package `jsonlite` will spit out a better-formatted version of a JSON file. 
 
-----
+
 - drwho2005  
   - id  
   - url  
@@ -86,7 +82,7 @@ Hint: The `prettify()` function in the R package `jsonlite` will spit out a bett
   - _links  
     - self  
     - show
-----
+
 
 Is there any information stored in the list structure that you feel is redundant? If so, why?
 
@@ -100,22 +96,30 @@ Consider what information you would need to examine the structure of Dr. Who epi
 
 Sketch one or more rectangular data tables that look like your expected output. Remember that if you link to an image, you must link to something with a picture extension (`.png`, `.jpg`), and if you reference a file it should be using a local path and you must also add the picture to your git repository. 
 
----
+----
 
 ![Sketch one data tables](drwho_sketch.png)
 
----
+----
 
 What operations will you need to perform to get the data into a form matching your sketch? Make an ordered list of steps you need to take.
 
----
+----
+
 1. Read 3 JSON files.
+
 2. Extract the episode information from each file.
+
 3. Unnest columns like `rating`, `image`, and `_links`.
+
 4. Fix data types like dates, numbers.
+
 5. Add a column showing which series the episode belongs to.
+
 6. Combine data from all three series.
+
 7. Check for missing or duplicated records before moving on.
+
 
 ## Implement Your Strategy
 
@@ -124,13 +128,15 @@ Make sure that the resulting tables have the correct variable types (e.g., dates
 
 Print out the first 5 rows of each table that you create (but no more)!
 
+----
+
 ```{r}
 # loading package
 library(jsonlite)
 library(dplyr)
 library(tidyr)
 
-# Create function to tidy each json file
+# create function to tidy each json file
 tidy <- function(path, series_name) {
   fromJSON(path) |>
     unnest_wider(rating, names_sep = "_") |>          # turn to rating_average
@@ -144,18 +150,17 @@ tidy <- function(path, series_name) {
     )
 }
         
-# Apply function to all 3 series
+# apply function to all 3 series
 drwho1963 <- tidy("drwho-766.json", "Doctor Who (1963)")
 drwho2005 <- tidy("drwho-210.json", "Doctor Who (2005)")
 drwho2023 <- tidy("drwho-72724.json", "Doctor Who (2023)")
 
-# Combine all 
+# combine all 
 drwho_combine <- bind_rows(drwho1963, drwho2005, drwho2023)
 
 head(drwho_combine, 5)
 ```
-
----
+----
 
 > I finished converting the JSON files into tidy tables. I used a function to unnest the nested fields from each JSON file. I unnest columns such as rating, image, and _links using unnest_wider(). Then I changed airdate to a Date and made sure numbers like runtime and rating_average have the right type. Then I combined all three into one data frame drwho_combine.
 
@@ -165,8 +170,7 @@ head(drwho_combine, 5)
 Visually represent the length of time between air dates of adjacent episodes within the same season, across all seasons of Dr. Who. You may need to create a factor to indicate which Dr. Who series is indicated, as there will be a Season 1 for each of the series. 
 Your plot must have appropriate labels and a title.
 
----
-
+----
 
 ```{r}
 # loading package
@@ -195,7 +199,7 @@ ggplot(episode_gaps_clean, aes(x = number, y = gap_days, group = interaction(ser
       ggtitle("Time Gaps Between Doctor Who Episodes") +
       labs(color = "Season")
 ```
----
+----
 
 In 2-3 sentences, explain what conclusions you might draw from the data. What patterns do you notice? Are there data quality issues?
 
@@ -209,6 +213,7 @@ In this section of the assignment, you will work with all of the provided JSON f
 Use a functional programming approach to read in all of the files and bind them together. 
 
 ----
+
 ```{r}
 library(jsonlite)
 library(dplyr)
@@ -267,7 +272,7 @@ Use the show URL (`_links` > `show` > `href`) to read in the JSON file for each 
 As with scraping, it is important to be polite and not make unnecessary server calls, so pre-process the data to ensure that you only make one server call for each show.
 You should use a functional programming approach when reading in these files. 
 
-----
+
 ```{r}
 library(lubridate)
 library(dplyr)
@@ -294,14 +299,14 @@ audience_summary <- whoverse |>
 
 audience_summary
 ```
----
+----
 
 > Most Doctorwho episodes across the three series were aired before 9 p.m. This suggests the production team wanted to focus on families or children. Only a small number of episodes were aired after 9 p.m and are marked as adult. For example, almost all episodes from Doctor Who (2005) and Doctor Who (2023) were aired earlier in the evening, while some shows that are related to Doctor Who might want to focus on older audiences. Moreover, Torchwood: Web of Lies doesn't have any airtime recorded, maybe because it was released as an online series.
+
 ----
 
 Process the JSON files using a functional approach and construct an appropriate table for the combined data you've acquired during this step (no need to join the data with the full `whoverse` episode-level data). 
 
-----
 
 ```{r}
 library(jsonlite)
@@ -374,6 +379,6 @@ ggplot(rating_summary, aes(x = show_name, y = avg_rating, fill = show_name)) +
   xlab("Series") + ylab("Average Rating") +
   ggtitle("Average Episode Ratings by Series") 
 ```
----
+----
 
-> **Result**:From the plot, I can see that Doctor Who (1963-1966) has the highest average episode rating. Meanwhile, Torchwood: Web of Lies has the lowest average rating, maybe because of its short length.Most other shows have similar ratings around 7.5-7.8, which showing consistent audience interest.
+> From the plot, I can see that Doctor Who (1963-1966) has the highest average episode rating. Meanwhile, Torchwood: Web of Lies has the lowest average rating, maybe because of its short length.Most other shows have similar ratings around 7.5-7.8, which showing consistent audience interest.
