@@ -30,6 +30,7 @@ For this portion of the assignment, only work with the canonical Dr. Who files (
 Add a code chunk that will read each of the JSON files in. 
 Store the data in a `drwhoYYYY` object, where `YYYY` is the first year the series  began to air. 
 How are the data objects stored?
+
 ```{r}
 # check if files exist
 file.exists("data/drwho1963.json")
@@ -39,7 +40,6 @@ file.exists("data/drwho2023.json")
 # show files
 list.files(pattern = "\\.json$")
 ```
-
 
 ```{r}
 # Loading package
@@ -55,6 +55,7 @@ str(drwho2005, max.level = 2)
 ```
 
 ---
+
 > Each drwhoYYYY object is stored as a data frame with nested data frames. Each file has a list with two main parts: The first part shows information like name, rating, schedule, etc. The second part has all episodes as a data frame, but some columns like rating, image, and _links are nested data frames within the main data frame.
 
 
@@ -129,29 +130,34 @@ library(jsonlite)
 library(dplyr)
 library(tidyr)
 
-# read json files
-drwho1963 <- fromJSON("drwho-766.json")
-drwho2005 <- fromJSON("drwho-210.json")
-drwho2023 <- fromJSON("drwho-72724.json")
+# Create function to tidy each json file
+tidy <- function(path, series_name) {
+  fromJSON(path) |>
+    unnest_wider(rating, names_sep = "_") |>          # turn to rating_average
+    unnest_wider(image, names_sep = "_") |>           # turn to image_medium, image_original
+    unnest_wider(`_links`, names_sep = "_") |>        # turn to _links_self, _links_show
+    unnest_wider(`_links_self`, names_sep = "_") |>   # turn to _links_self_url
+    unnest_wider(`_links_show`, names_sep = "_") |>   # turn to _links_show_url
+    mutate(airdate = as.Date(airdate), runtime = as.numeric(runtime),
+           rating_average = as.numeric(rating_average),
+           series = series_name
+    )
+}
+        
+# Apply function to all 3 series
+drwho1963 <- tidy("drwho-766.json", "Doctor Who (1963)")
+drwho2005 <- tidy("drwho-210.json", "Doctor Who (2005)")
+drwho2023 <- tidy("drwho-72724.json", "Doctor Who (2023)")
 
-# unnest nested columns
-tidy_drwho2005 <- drwho2005 |>
-  unnest_wider(rating, names_sep = "_") |>        # turn to rating_average
-  unnest_wider(image,  names_sep = "_") |>         # turn to image_medium, image_original
-  unnest_wider(`_links`, names_sep = "_") |>      # turn to _links_self, _links_show
-  unnest_wider(`_links_self`, names_sep = "_") |>  # turn to _links_self_url
-  unnest_wider(`_links_show`, names_sep = "_") %>%  # -> _links_show_url
-  mutate(airdate = as.Date(airdate), runtime = as.numeric(runtime),rating_average = as.numeric(rating_average),
-         show_name = "Doctor Who (2005)")
-# combine all together 
-drwho_combine <- tidy_drwho2005
+# Combine all 
+drwho_combine <- bind_rows(drwho1963, drwho2005, drwho2023)
 
-# print first 5 rows
 head(drwho_combine, 5)
 ```
 
 ---
-> I finished converting the JSON files into tidy tables. I unnest columns such as rating, image, and _links using unnest_wider(). Then I changed airdate to a Date and made sure numbers like runtime and rating_average have the right type.  
+
+> I finished converting the JSON files into tidy tables. I used a function to unnest the nested fields from each JSON file. I unnest columns such as rating, image, and _links using unnest_wider(). Then I changed airdate to a Date and made sure numbers like runtime and rating_average have the right type. Then I combined all three into one data frame drwho_combine.
 
 
 ## Examining Episode Air Dates
@@ -160,32 +166,40 @@ Visually represent the length of time between air dates of adjacent episodes wit
 Your plot must have appropriate labels and a title.
 
 ---
+
+
 ```{r}
 # loading package
 library(ggplot2)
 library(dplyr)
 
 # calculate airdate gaps
-episode_gaps <- tidy_drwho2005 |>
-arrange(season, airdate) |>
-group_by(season) |>
-mutate(gap_days = as.numeric(airdate - lag(airdate))) |>
-ungroup()
+episode_gaps <- drwho_combine |>
+  arrange(series, season, airdate) |>
+  group_by(series, season) |>
+  mutate(gap_days = as.numeric(airdate - lag(airdate))) |>
+  ungroup()
+
+episode_gaps_clean <- episode_gaps |>
+  filter(!is.na(gap_days), !is.infinite(gap_days))
 
 head(episode_gaps[, c("season", "number", "name", "airdate", "gap_days")], 10)
 
 # draw plot
-ggplot(episode_gaps, aes(x = number, y = gap_days, group = season, color = season)) +
-            geom_line() +
-            geom_point() +
-            xlab("Episode Number") + ylab("Gap Between Air Dates") +
-            ggtitle("Time Gaps Between Doctor Who (2005) Episodes")
+ggplot(episode_gaps_clean, aes(x = number, y = gap_days, group = interaction(series, season),
+                               color = as.factor(season))) +
+      geom_line(alpha = 0.7) +
+      geom_point(size = 1.2) +
+      facet_wrap(~ series, scales = "free_x") +
+      xlab("Episode Number") + ylab("Gap Between Episodes") +
+      ggtitle("Time Gaps Between Doctor Who Episodes") +
+      labs(color = "Season")
 ```
 ---
 
 In 2-3 sentences, explain what conclusions you might draw from the data. What patterns do you notice? Are there data quality issues?
 
-> The plot shows how much time passed between each episode within the same season. Most episodes are released weekly, with a gap of about 7 days. But I can see some special episodes have much longer gaps, showing that they are released separately. 
+> From the plot, I can see that most episodes in each season aired only a few days apart, less than 10 days. But I still can see there are some very large gaps, like in the 2005 series, showing some delays or breaks. Some outliers or missing values might relate to data quality issues, like missing air dates.
 
 # Timey-Wimey Series and Episodes
 
@@ -257,21 +271,21 @@ You should use a functional programming approach when reading in these files.
 ```{r}
 library(lubridate)
 library(dplyr)
-library(ggplot2)
 
 json_files <- list.files(pattern = "\\.json$")
 whoverse <- map_dfr(json_files, fromJSON, .id = "source_file")
 
-# convert airtime to hour
-whoverse <- whoverse |>
-  mutate(
-    airtime_hour = hour(hm(airtime)),
-    target_audience = case_when(
-      airtime_hour >= 21 | airtime_hour < 5.5 ~ "Adult (after watershed)",
-      is.na(airtime_hour) ~ "Missing airtime",
-      TRUE ~ "Family/Children"
-    )
-  )
+# convert airtime to number
+whoverse$airtime_hour <- as.numeric(substr(whoverse$airtime, 1, 2))
+
+# create a new column for audience type
+whoverse$target_audience <- ifelse(
+  is.na(whoverse$airtime_hour), 
+  "no airtime",
+  ifelse(whoverse$airtime_hour >= 21 | whoverse$airtime_hour < 6, 
+         "adult time", 
+         "family")
+)
 
 # count how many episodes per category
 audience_summary <- whoverse |>
@@ -280,7 +294,9 @@ audience_summary <- whoverse |>
 
 audience_summary
 ```
+---
 
+> Most Doctorwho episodes across the three series were aired before 9 p.m. This suggests the production team wanted to focus on families or children. Only a small number of episodes were aired after 9 p.m and are marked as adult. For example, almost all episodes from Doctor Who (2005) and Doctor Who (2023) were aired earlier in the evening, while some shows that are related to Doctor Who might want to focus on older audiences. Moreover, Torchwood: Web of Lies doesn't have any airtime recorded, maybe because it was released as an online series.
 ----
 
 Process the JSON files using a functional approach and construct an appropriate table for the combined data you've acquired during this step (no need to join the data with the full `whoverse` episode-level data). 
@@ -292,27 +308,23 @@ library(jsonlite)
 library(dplyr)
 library(purrr)
 library(tidyr)
+
 # tidy and rename
 whoverse <- map_dfr(json_files, tidy) |> 
   rename(show_url = `_links_show_href`)
 
-# get unique show_url
+# get unique show_url 
 unique_shows <- unique(whoverse$show_url)
 shows_list <- map(unique_shows, fromJSON)
 
 # clean into table
 shows_info <- map_dfr(shows_list, function(x) {
   tibble(
-    show_id   = x$id,
-    show_name = x$name,
-    language  = x$language,
-    genres    = paste(x$genres, collapse = ", "),
-    status    = x$status,
-    runtime   = x$runtime,
-    premiered = x$premiered,
-    ended     = x$ended,
-    rating    = x$rating$average,
-    official_site = x$officialSite
+    show_id = x$id, show_name = x$name,
+    language = x$language, genres = paste(x$genres, collapse = ", "),
+    status = x$status, runtime = x$runtime,
+    premiered = x$premiered, ended = x$ended,
+    rating = x$rating$average, official_site = x$officialSite
   )
 })
 
@@ -323,7 +335,7 @@ head(shows_info, 5)
 
 What keys would you use to join this data with the `whoverse` episode level data? Explain.
 
-> I used the show URLs from the `whoverse` table to read another layer of JSON data. Each show file contains general information like the show name, language, genres, and average rating. The new table shows_info has one row per show. If I wanted to join it with the main whoverse table, I could use the column show_url in whoverse and id in shows_info because both refer to the same show.
+> I used the show URLs from the whoverse table to read another layer of JSON data. Each show file contains general information like the show name, language, genres, and average rating. The new table shows_info has one row per show. If I wanted to join it with the main whoverse table, I could use the column show_url in whoverse and id in shows_info because both refer to the same show.
 
 
 ## Explore!
@@ -347,23 +359,21 @@ Code goes here -- once you output a result, you should explain it using markdown
 library(dplyr)
 library(ggplot2)
 
-file_mapping <- c("1" = "drwho-72724", "2" = "drwho-210", "3" = "drwho-766",
-                  "4" = "sarahjane-970", "5" = "torchwood-659", "6" = "torchwood-26694")
+
 rating_summary <- whoverse |>
-  group_by(source_file) |>
+  group_by(show_name) |> 
   summarise(
     avg_rating = mean(rating_average, na.rm = TRUE),
     num_episodes = n(),
     .groups = "drop"
-  ) |>
-  # Map numbers to actual names
-  mutate(series_label = file_mapping[source_file]  )
+  )
 
-# Draw plot with proper labels
-ggplot(rating_summary, aes(x = series_label, y = avg_rating,  fill = source_file)) +
+# Draw plot
+ggplot(rating_summary, aes(x = show_name, y = avg_rating, fill = show_name)) +
   geom_col(width = 0.5, show.legend = FALSE) +
-  xlab("Series (from JSON file)") + ylab("Average rating") +
-  ggtitle("Average rating by series") 
+  xlab("Series") + ylab("Average Rating") +
+  ggtitle("Average Episode Ratings by Series") 
 ```
 ---
-> **Result**:Doctor Who (2005-2022) has the highest average rating.Torchwood: Web of Lies is shorter, so its score is less stable.
+
+> **Result**:From the plot, I can see that Doctor Who (1963-1966) has the highest average episode rating. Meanwhile, Torchwood: Web of Lies has the lowest average rating, maybe because of its short length.Most other shows have similar ratings around 7.5-7.8, which showing consistent audience interest.
